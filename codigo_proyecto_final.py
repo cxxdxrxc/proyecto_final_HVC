@@ -46,7 +46,12 @@ def get_prices_actions(tickers=TICKERS, start=INICIO_ACC, end=HOY_ACC):
     return df
 
 PRICES = get_prices_actions()
-RETURNS = PRICES.pct_change().dropna()
+
+# 🔹 Convertir todo a valores numéricos para evitar strings o None
+PRICES = PRICES.apply(pd.to_numeric, errors="coerce")
+
+# 🔹 Calcular retornos de forma segura y sin warnings
+RETURNS = PRICES.pct_change(fill_method=None).dropna(how="all")
 
 # ============================================================
 # 2. DATOS DE CRIPTOS (Data1 + Data2)
@@ -56,12 +61,21 @@ RETURNS = PRICES.pct_change().dropna()
 Data1 = pd.read_csv("Data1.csv", index_col=0)
 Data2 = pd.read_csv("Data2.csv", index_col=0)
 
+# Unir los dos CSV en un solo DataFrame grande
 CRYPTO_WIDE = pd.concat([Data1, Data2])
-CRYPTO_WIDE.index = pd.to_datetime(CRYPTO_WIDE.index)
+
+# Asegurar que el índice sea datetime y esté ordenado
+CRYPTO_WIDE.index = pd.to_datetime(CRYPTO_WIDE.index, errors="coerce")
 CRYPTO_WIDE = CRYPTO_WIDE.sort_index()
 
-CRYPTO_RET = CRYPTO_WIDE.pct_change()
+# MUY IMPORTANTE: convertir todas las columnas a numéricas
+# (cualquier cosa rara / texto se vuelve NaN)
+CRYPTO_WIDE = CRYPTO_WIDE.apply(pd.to_numeric, errors="coerce")
 
+# Retornos: pct_change sin fill_method implícito y quitando filas completamente vacías
+CRYPTO_RET = CRYPTO_WIDE.pct_change(fill_method=None).dropna(how="all")
+
+# Lista de criptos (columnas)
 crypto_list = list(CRYPTO_WIDE.columns)
 
 min_date_crypto = CRYPTO_WIDE.index.min()
