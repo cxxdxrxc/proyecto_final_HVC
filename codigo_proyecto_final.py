@@ -56,45 +56,48 @@ RETURNS = PRICES.pct_change(fill_method=None).dropna(how="all")
 # ============================================================
 # 2. DATOS DE CRIPTOS (Data1 + Data2)
 # ============================================================
+# ========================
+# 2. Cargar criptomonedas
+# ========================
 
-# IMPORTANTE: Data1.csv y Data2.csv deben estar en la misma carpeta que este archivo.
+# Data1.csv y Data2.csv están en formato "largo" (OHLCV + ticker)
+df1 = pd.read_csv("Data1.csv")
+df2 = pd.read_csv("Data2.csv")
 
-# 1. Leer CSV en formato largo (Date, ticker, Open, High, Low, Close, Volume, ...)
-Data1 = pd.read_csv("Data1.csv")
-Data2 = pd.read_csv("Data2.csv")
+# Unirlos en un solo DataFrame
+df_crypto_raw = pd.concat([df1, df2], ignore_index=True)
 
-# 2. Unir los dos
-df_crypto_raw = pd.concat([Data1, Data2], ignore_index=True)
-
-# 3. Asegurar tipo de fecha y ordenar
+# Asegurarnos de que 'Date' sea datetime
 df_crypto_raw["Date"] = pd.to_datetime(df_crypto_raw["Date"], errors="coerce")
 df_crypto_raw = df_crypto_raw.dropna(subset=["Date"])
-df_crypto_raw = df_crypto_raw.sort_values(["Date", "ticker"])
 
-# 4. Eliminar duplicados por (Date, ticker) si los hubiera
-df_crypto_raw = df_crypto_raw.drop_duplicates(subset=["Date", "ticker"], keep="last")
+# Nos quedamos solo con las columnas que necesitamos
+# (asegúrate de que estos nombres estén exactamente así en tus CSV)
+df_crypto_raw = df_crypto_raw[["Date", "ticker", "Close"]]
 
-# 5. Pasar a formato ancho: una columna por cripto, usando el precio de cierre
-#    (ajusta "Close" si tu columna se llama distinto)
+# Pivoteamos: filas = fechas, columnas = ticker, valores = Close
 CRYPTO_WIDE = df_crypto_raw.pivot_table(
     index="Date",
     columns="ticker",
     values="Close",
-    aggfunc="last"      # si había duplicados, se queda con el último
+    aggfunc="last"          # por si hay duplicados en misma fecha
 )
 
-# 6. Convertir todo a numérico (cualquier cosa rara -> NaN)
+# Ordenar por fecha y convertir a numérico
+CRYPTO_WIDE = CRYPTO_WIDE.sort_index()
 CRYPTO_WIDE = CRYPTO_WIDE.apply(pd.to_numeric, errors="coerce")
 
-# 7. Retornos diarios sin fill_method implícito y quitando filas completamente vacías
+# Retornos diarios de cripto (sin fill_method implícito)
 CRYPTO_RET = CRYPTO_WIDE.pct_change(fill_method=None).dropna(how="all")
 
-# 8. Lista de criptos para los dropdowns
+# Lista de criptos disponibles (columnas)
 crypto_list = list(CRYPTO_WIDE.columns)
 
-# 9. Fechas mín/máx para los controles de rango
-min_date_crypto = CRYPTO_WIDE.index.min()
-max_date_crypto = CRYPTO_WIDE.index.max()
+# Rango de fechas para los DatePicker de cripto
+min_date_crypto = CRYPTO_RET.index.min()
+max_date_crypto = CRYPTO_RET.index.max()
+
+# último año como default
 default_start_crypto = max_date_crypto - pd.Timedelta(days=365)
 if default_start_crypto < min_date_crypto:
     default_start_crypto = min_date_crypto
@@ -217,10 +220,10 @@ layout_inciso3a = html.Div([
             html.Label("Rango de fechas"),
             dcc.DatePickerRange(
                 id="date_range_boll",
-                min_date_allowed=min_date_crypto.date(),
-                max_date_allowed=max_date_crypto.date(),
-                start_date=default_start_crypto.date(),
-                end_date=max_date_crypto.date(),
+                min_date_allowed=min_date_crypto,
+                max_date_allowed=max_date_crypto,
+                start_date=default_start_crypto,
+                end_date=max_date_crypto,
                 display_format="YYYY-MM-DD",
                 style={"marginTop": "6px", "display": "block"}
             ),
@@ -274,7 +277,7 @@ layout_inciso3b = html.Div([
             options=[{"label": c, "value": c} for c in crypto_list],
             value=[],
             multi=True,
-            placeholder="Selecciona criptomonedas..."
+            placeholder="Select"
         ),
         html.Div([
             html.Button("Seleccionar todas", id="btn_anim_select_all", n_clicks=0),
@@ -361,7 +364,7 @@ def render_tab_content(tab):
 )
 def update_view_acciones(tickers_sel, view, start_date, end_date):
     if not tickers_sel:
-        fig = px.line(title="Selecciona al menos una acción")
+        fig = px.line(title="Select")
         return fig, "—"
 
     px_df = PRICES.loc[start_date:end_date, tickers_sel]
@@ -397,7 +400,7 @@ def actualizar_bollinger(crypto, window, sigma, start_date, end_date):
     if crypto is None:
         fig = go.Figure()
         fig.update_layout(
-            title="Selecciona una criptomoneda",
+            title="Select",
             plot_bgcolor="white"
         )
         return fig, ""
@@ -508,7 +511,7 @@ def build_crypto_animation(selected_cryptos):
     if not selected_cryptos:
         fig = go.Figure()
         fig.update_layout(
-            title="Selecciona al menos una criptomoneda",
+            title="Select",
             plot_bgcolor="white"
         )
         return fig
@@ -658,7 +661,7 @@ def actualizar_grafico_anim(cryptos_sel):
     if not cryptos_sel:
         fig = go.Figure()
         fig.update_layout(
-            title="Selecciona al menos una criptomoneda",
+            title="Select",
             plot_bgcolor="white"
         )
         return fig
