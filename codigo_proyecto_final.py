@@ -58,26 +58,34 @@ RETURNS = PRICES.pct_change(fill_method=None).dropna(how="all")
 # ============================================================
 
 # IMPORTANTE: Data1.csv y Data2.csv deben estar en la misma carpeta que este archivo.
-Data1 = pd.read_csv("Data1.csv", index_col=0)
-Data2 = pd.read_csv("Data2.csv", index_col=0)
 
-# Unir los dos CSV en un solo DataFrame grande
-CRYPTO_WIDE = pd.concat([Data1, Data2])
+# 1. Leer los dos CSV en formato "largo"
+Data1 = pd.read_csv("Data1.csv")
+Data2 = pd.read_csv("Data2.csv")
 
-# Asegurar que el índice sea datetime y esté ordenado
-CRYPTO_WIDE.index = pd.to_datetime(CRYPTO_WIDE.index, errors="coerce")
-CRYPTO_WIDE = CRYPTO_WIDE.sort_index()
+# 2. Unirlos por filas
+df_crypto_raw = pd.concat([Data1, Data2], ignore_index=True)
 
-# MUY IMPORTANTE: convertir todas las columnas a numéricas
-# (cualquier cosa rara / texto se vuelve NaN)
+# 3. Asegurar tipo de fecha
+# Cambia "Date" por "date" si tu columna se llama distinto
+df_crypto_raw["Date"] = pd.to_datetime(df_crypto_raw["Date"], errors="coerce")
+df_crypto_raw = df_crypto_raw.dropna(subset=["Date"])
+df_crypto_raw = df_crypto_raw.sort_values("Date")
+
+# 4. Pasar a formato ancho: una columna por cripto (usando el precio de cierre)
+#    Si tu CSV usa otro nombre (por ejemplo "close"), ajústalo aquí.
+CRYPTO_WIDE = df_crypto_raw.pivot(index="Date", columns="ticker", values="Close")
+
+# 5. Convertir todo a numérico por seguridad
 CRYPTO_WIDE = CRYPTO_WIDE.apply(pd.to_numeric, errors="coerce")
 
-# Retornos: pct_change sin fill_method implícito y quitando filas completamente vacías
+# 6. Retornos diarios seguros (sin fill_method implícito)
 CRYPTO_RET = CRYPTO_WIDE.pct_change(fill_method=None).dropna(how="all")
 
-# Lista de criptos (columnas)
+# 7. Lista de criptos para los dropdowns
 crypto_list = list(CRYPTO_WIDE.columns)
 
+# 8. Fechas mín/máx para los controles de rango
 min_date_crypto = CRYPTO_WIDE.index.min()
 max_date_crypto = CRYPTO_WIDE.index.max()
 default_start_crypto = max_date_crypto - pd.Timedelta(days=365)
