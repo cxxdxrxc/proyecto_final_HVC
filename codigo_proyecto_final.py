@@ -27,60 +27,14 @@ DESC = {
     "GE":  "General Electric — Industrial (energía, salud, aeroespacial).",
 }
 
-HOY_ACC = date.today()
-INICIO_ACC = HOY_ACC - timedelta(days=365 * 15)  # ~15 años
+# ==== ACCIONES DESDE CSV (sin yfinance en producción) ====
 
+ACCIONES_FILE = "Acciones.csv"   # asegúrate de que este archivo esté en el repo
 
-def get_prices_actions(tickers=TICKERS, start=INICIO_ACC, end=HOY_ACC):
-    # Descarga conjunta
-    df = yf.download(
-        tickers,
-        start=start,
-        end=end + timedelta(days=1),
-        auto_adjust=True,
-        progress=False
-    )
-
-    # Si viene MultiIndex (Adj Close, Close, etc.), nos quedamos con Close o Adj Close
-    if isinstance(df.columns, pd.MultiIndex):
-        # usa "Adj Close" si existe, si no "Close"
-        if "Adj Close" in df.columns.levels[0]:
-            df = df["Adj Close"].copy()
-        else:
-            df = df["Close"].copy()
-
-    df.index = pd.to_datetime(df.index, errors="coerce")
-    df = df.dropna(how="all")
-
-    # Ver qué tickers faltan en las columnas
-    presentes = [c for c in df.columns if c in tickers]
-    faltantes = [t for t in tickers if t not in presentes]
-
-    # Reintentar cada faltante por separado
-    for t in faltantes:
-        try:
-            s = yf.download(
-                t,
-                start=start,
-                end=end + timedelta(days=1),
-                auto_adjust=True,
-                progress=False
-            )["Close"]
-            s = s.dropna()
-            s.name = t
-            df = pd.concat([df, s], axis=1)
-        except Exception as e:
-            print(f"No se pudo descargar {t}: {e}")
-
-    # Nos quedamos solo con las columnas de los tickers originales que sí existen
-    cols_finales = [t for t in tickers if t in df.columns]
-    df = df[cols_finales]
-
-    return df
-
-
-# === Construcción de PRICES y RETURNS ===
-PRICES = get_prices_actions()
+# Leemos precios de cierre (ya guardados desde tu notebook)
+PRICES = pd.read_csv(ACCIONES_FILE, index_col=0)
+PRICES.index = pd.to_datetime(PRICES.index, errors="coerce")
+PRICES = PRICES.dropna(how="all")
 
 # Convertir a numérico por seguridad
 PRICES = PRICES.apply(pd.to_numeric, errors="coerce")
@@ -199,7 +153,7 @@ layout_inciso1 = html.Div([
             dcc.Dropdown(
                 id="acciones_sel",
                 options=[{"label": t, "value": t} for t in ACCIONES_LIST],
-                value=["PG", "KO", "PEP"],
+                value=[ACCIONES_LIST],
                 multi=True
             )
         ], style={"flex": "2"}),
