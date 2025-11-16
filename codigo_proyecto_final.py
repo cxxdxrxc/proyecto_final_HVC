@@ -153,6 +153,10 @@ server = app.server
 # ------------------- Layout de cada tab (inciso) -------------------
 
 # INCISO 1 – Exploración de acciones (precios y retornos)
+# =========================
+#  LAYOUT INCISO 1 (ACCIONES)
+# =========================
+
 layout_inciso1 = html.Div([
     html.H2("Exploración de acciones: precios y retornos",
             style={"textAlign": "center"}),
@@ -166,10 +170,11 @@ layout_inciso1 = html.Div([
             dcc.Dropdown(
                 id="acciones_sel",
                 options=[{"label": t, "value": t} for t in ACCIONES_LIST],
-                value=[ACCIONES_LIST],
-                multi=True
+                value=ACCIONES_LIST[:3],  # Elegimos 3 por default (si quieres puedes dejarlo vacío: value=[])
+                multi=True,
+                placeholder="Selecciona una o varias acciones..."
             )
-        ], style={"flex": "2"}),
+        ], style={"flex": "3"}),
 
         html.Div([
             html.Label("Vista"),
@@ -183,6 +188,7 @@ layout_inciso1 = html.Div([
                 labelStyle={"display": "block"}
             )
         ], style={"flex": "1", "marginLeft": "12px"}),
+
     ], style={"display": "flex", "gap": "12px", "marginBottom": "10px"}),
 
     dcc.DatePickerRange(
