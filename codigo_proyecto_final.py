@@ -433,12 +433,14 @@ app.layout = html.Div([
     html.H1("Proyecto Final – Python for Finance",
             style={"textAlign": "center"}),
 
-    html.P("Exploración y análisis de riesgo de acciones y criptomonedas para un fondo de inversión.",
-           style={"textAlign": "center", "marginBottom": "15px"}),
+    html.P(
+        "Exploración y análisis de riesgo de acciones y criptomonedas para un fondo de inversión.",
+        style={"textAlign": "center", "marginBottom": "15px"}
+    ),
 
     dcc.Tabs(
         id="tabs-proyecto",
-        value="inciso1",
+        value="inciso1",   # pestaña inicial
         children=[
             dcc.Tab(label="Acciones: precios y retornos", value="inciso1"),
             dcc.Tab(label="Acciones: análisis de riesgo", value="inciso2"),
@@ -452,15 +454,18 @@ app.layout = html.Div([
 ])
 
 
-# ============================================================
-# 5. CALLBACK PARA CAMBIAR EL CONTENIDO DE LAS TABS
-# ============================================================
+# -------- Callback para mostrar el contenido de cada pestaña --------
 
 @app.callback(
     Output("content-tabs", "children"),
     Input("tabs-proyecto", "value")
 )
 def render_tab_content(tab):
+    """
+    Devuelve el layout correspondiente según la pestaña seleccionada.
+    Asegurarse de que layout_inciso1, layout_inciso2, layout_inciso3a,
+    layout_inciso3b y layout_inciso3c estén definidos arriba en el archivo.
+    """
     if tab == "inciso1":
         return layout_inciso1
     elif tab == "inciso2":
@@ -471,7 +476,12 @@ def render_tab_content(tab):
         return layout_inciso3b
     elif tab == "inciso3c":
         return layout_inciso3c
-    return html.Div("Tab no encontrada.")
+
+    # fallback por si llega un valor raro
+    return html.Div(
+        "Pestaña no encontrada.",
+        style={"padding": "20px", "textAlign": "center"}
+    )
 
 
 # ============================================================
