@@ -267,7 +267,7 @@ layout_inciso2 = html.Div([
     html.P("Volatilidad, sesgo, curtosis, VaR, CVaR y Max Drawdown para las acciones seleccionadas.",
            style={"textAlign": "center"}),
 
-    # Controles
+    # Controles principales
     html.Div([
         html.Div([
             html.Label("Acciones"),
@@ -304,10 +304,11 @@ layout_inciso2 = html.Div([
             end_date=max_date_acc.date(),
             display_format="YYYY-MM-DD"
         )
-    ], style={"marginBottom": "15px"}),
+    ], style={"marginBottom": "20px"}),
 
     html.Hr(),
 
+    # --- Gráficos de momentos y VaR/CVaR/MDD ---
     html.H3("Volatilidad, sesgo y curtosis (por acción)"),
     dcc.Graph(id="graf_vol_skw_kurt"),
 
@@ -315,9 +316,25 @@ layout_inciso2 = html.Div([
     dcc.Graph(id="graf_var_cvar"),
 
     html.H3("Max Drawdown por acción"),
-    dcc.Graph(id="graf_mdd_acc"),
-], style={"maxWidth": "1100px", "margin": "0 auto", "padding": "10px"})
+    dcc.Graph(id="graf_mdd_acc"),   # ← OJO: id nuevo, no graf_mdd
 
+    html.Hr(),
+
+    # --- Sección extra: histograma de retornos de UNA acción ---
+    html.H3("Histograma de retornos diarios (acción individual)"),
+    html.Div([
+        html.Label("Acción para histograma"),
+        dcc.Dropdown(
+            id="hist_sel",
+            options=[{"label": t, "value": t} for t in ACCIONES_LIST],
+            value=ACCIONES_LIST[0],   # primera acción por defecto
+            clearable=False,
+            placeholder="Selecciona una acción"
+        )
+    ], style={"maxWidth": "300px", "marginBottom": "10px"}),
+
+    dcc.Graph(id="graf_hist")
+], style={"maxWidth": "1100px", "margin": "0 auto", "padding": "10px"})
 
 # INCISO 3a – Bandas de Bollinger para retornos de criptos
 layout_inciso3a = html.Div([
@@ -584,10 +601,6 @@ def actualizar_inciso1(tickers_sel, vista, start_date, end_date):
     return fig, desc_text
 
 
-# ============================================================
-#  CALLBACK – INCISO 2
-# ============================================================
-
 @app.callback(
     Output("graf_vol_skw_kurt", "figure"),
     Output("graf_var_cvar", "figure"),
@@ -659,7 +672,7 @@ def actualizar_inciso2(tickers_sel, alpha, start_date, end_date):
         else:
             vols[t] = float(s.std())              # volatilidad diaria
             skws[t] = float(skew(s, bias=False))  # asimetría
-            kurts[t] = float(kurtosis(s, fisher=True, bias=False))  # curtosis (exceso)
+            kurts[t] = float(kurtosis(s, fisher=True, bias=False))  # exceso de curtosis
 
     df_mom = pd.DataFrame({
         "Ticker": tickers_sel,
@@ -668,7 +681,6 @@ def actualizar_inciso2(tickers_sel, alpha, start_date, end_date):
         "Kurtosis": [kurts[t] for t in tickers_sel],
     })
 
-    # Gráfico: barras agrupadas Vol / Skew / Kurtosis
     fig_mom = go.Figure()
     fig_mom.add_bar(x=df_mom["Ticker"], y=df_mom["Vol"], name="Volatilidad (σ)")
     fig_mom.add_bar(x=df_mom["Ticker"], y=df_mom["Skew"], name="Skewness")
@@ -739,6 +751,59 @@ def actualizar_inciso2(tickers_sel, alpha, start_date, end_date):
     fig_mdd.update_layout(plot_bgcolor="white")
 
     return fig_mom, fig_var, fig_mdd
+
+
+
+# ---------- Histograma de retornos (acción individual, inciso 2) ----------
+
+@app.callback(
+    Output("graf_hist", "figure"),
+    Input("hist_sel", "value"),
+    Input("dates_risk", "start_date"),
+    Input("dates_risk", "end_date"),
+)
+def actualizar_histograma_accion(ticker, start_date, end_date):
+    fig = go.Figure()
+
+    # Validaciones básicas
+    if ticker is None or ticker not in RETURNS.columns:
+        fig.update_layout(
+            title="Selecciona una acción válida para el histograma",
+            plot_bgcolor="white"
+        )
+        return fig
+
+    s = RETURNS[ticker].dropna()
+
+    # Filtro de fechas igual que en el resto del inciso 2
+    if start_date is not None:
+        s = s[s.index >= pd.to_datetime(start_date)]
+    if end_date is not None:
+        s = s[s.index <= pd.to_datetime(end_date)]
+
+    if s.empty:
+        fig.update_layout(
+            title="No hay datos de retornos en ese rango de fechas para esta acción",
+            plot_bgcolor="white"
+        )
+        return fig
+
+    fig.add_histogram(
+        x=s,
+        nbinsx=40,
+        name="Retornos diarios",
+        opacity=0.8
+    )
+
+    fig.update_layout(
+        title=f"Distribución de retornos diarios — {ticker}",
+        xaxis_title="Retorno diario",
+        yaxis_title="Frecuencia",
+        bargap=0.05,
+        plot_bgcolor="white"
+    )
+
+    return fig
 
 
 # ---------- Inciso 3a – Bollinger cripto ----------
