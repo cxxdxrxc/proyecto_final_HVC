@@ -39,7 +39,7 @@ df_acc = pd.read_csv("Acciones.csv", index_col=0)  # primera columna = fecha
 
 # Asegurar que el índice son fechas y está ordenado
 df_acc.index = pd.to_datetime(df_acc.index, errors="coerce")
-df_acc = df_acc.dropna(subset=[df_acc.index.name])
+df_acc = df_acc[~df_acc.index.isna()]
 df_acc = df_acc.sort_index()
 
 # =========================
