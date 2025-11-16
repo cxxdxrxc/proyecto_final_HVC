@@ -485,10 +485,10 @@ app.layout = html.Div([
         id="tabs-proyecto",
         value="inciso1",   # pestaña inicial
         children=[
-            dcc.Tab(label="Acciones: precios y retornos", value="inciso1"),
-            dcc.Tab(label="Acciones: análisis de riesgo", value="inciso2"),
-            dcc.Tab(label="Cripto: Bollinger retornos", value="inciso3a"),
-            dcc.Tab(label="Cripto: gráfico animado", value="inciso3b"),
+            dcc.Tab(label="Acciones: Precios y Retornos", value="inciso1"),
+            dcc.Tab(label="Acciones: Análisis de Riesgo", value="inciso2"),
+            dcc.Tab(label="Cripto: Bollinger Retornos", value="inciso3a"),
+            dcc.Tab(label="Cripto: Gráfico Animado", value="inciso3b"),
             dcc.Tab(label="Cripto: MDD y CVaR 95%", value="inciso3c"),
         ]
     ),
