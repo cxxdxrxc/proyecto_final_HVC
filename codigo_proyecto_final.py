@@ -16,8 +16,7 @@ from scipy.stats import kurtosis, skew
 # 1. DATOS DE ACCIONES (Exploración + Riesgo)
 # ============================================================
 
-TICKERS = ["PG", "KO", "PEP", "CAT", "HON", "GE"]
-
+# --- Descripciones breves de las empresas ---
 DESC = {
     "PG":  "Procter & Gamble — Consumo masivo (hogar, cuidado personal).",
     "KO":  "Coca-Cola — Consumo masivo (bebidas no alcohólicas).",
@@ -27,34 +26,47 @@ DESC = {
     "GE":  "General Electric — Industrial (energía, salud, aeroespacial).",
 }
 
-ACCIONES_FILE = "Acciones.csv"   # este archivo tiene que estar en el repo (misma carpeta que el .py)
+# =========================
+# 1. Cargar Acciones.csv
+# =========================
+# Se asume que Acciones.csv tiene columnas: Date, ticker, Open, High, Low, Close, Volume
+df_acc = pd.read_csv("Acciones.csv")
 
-# Leer precios de cierre desde el CSV
-PRICES = pd.read_csv(ACCIONES_FILE, index_col=0)
+# Aseguramos tipo fecha y orden
+df_acc["Date"] = pd.to_datetime(df_acc["Date"], errors="coerce")
+df_acc = df_acc.dropna(subset=["Date"])
+df_acc = df_acc.sort_values(["Date", "ticker"])
 
-# Índice como fecha
-PRICES.index = pd.to_datetime(PRICES.index, errors="coerce")
-PRICES = PRICES.dropna(how="all")
+# Eliminamos duplicados (Date, ticker) si existieran
+df_acc = df_acc.drop_duplicates(subset=["Date", "ticker"], keep="last")
 
-# Nos quedamos solo con las columnas que estén en TICKERS y sí existan en el CSV
-cols_finales = [t for t in TICKERS if t in PRICES.columns]
-PRICES = PRICES[cols_finales]
+# =========================
+# 2. Pivot a formato ancho: precios de cierre
+# =========================
+PRICES = df_acc.pivot_table(
+    index="Date",
+    columns="ticker",
+    values="Close",
+    aggfunc="last"
+)
 
-# Asegurar que todo sea numérico
+# Ordenar índice y convertir a numérico
+PRICES = PRICES.sort_index()
 PRICES = PRICES.apply(pd.to_numeric, errors="coerce")
 
-# Retornos diarios
+# =========================
+# 3. Retornos diarios
+# =========================
 RETURNS = PRICES.pct_change(fill_method=None).dropna(how="all")
 
-# Lista real de acciones (para dropdowns)
+# Lista de acciones disponibles (columnas del pivot)
 ACCIONES_LIST = list(PRICES.columns)
 
-# Fechas para el DatePicker de acciones
+# Fechas mín/máx para los controles
 min_date_acc = PRICES.index.min()
 max_date_acc = PRICES.index.max()
-
-# 15 años hacia atrás desde la última fecha disponible (o hasta el mínimo)
-default_start_acc = max_date_acc - pd.Timedelta(days=365 * 15)
+# Por defecto mostramos últimos 5 años
+default_start_acc = max_date_acc - pd.Timedelta(days=365 * 5)
 if default_start_acc < min_date_acc:
     default_start_acc = min_date_acc
 
@@ -170,7 +182,7 @@ layout_inciso1 = html.Div([
             dcc.Dropdown(
                 id="acciones_sel",
                 options=[{"label": t, "value": t} for t in ACCIONES_LIST],
-                value=ACCIONES_LIST[:3],  # Elegimos 3 por default (si quieres puedes dejarlo vacío: value=[])
+                value=ACCIONES_LIST[:3],       # si quieres que empiece vacío: value=[]
                 multi=True,
                 placeholder="Selecciona una o varias acciones..."
             )
@@ -188,7 +200,6 @@ layout_inciso1 = html.Div([
                 labelStyle={"display": "block"}
             )
         ], style={"flex": "1", "marginLeft": "12px"}),
-
     ], style={"display": "flex", "gap": "12px", "marginBottom": "10px"}),
 
     dcc.DatePickerRange(
@@ -367,34 +378,94 @@ def render_tab_content(tab):
 
 # ---------- Inciso 1 – acciones ----------
 
+
 @app.callback(
     Output("main_chart", "figure"),
     Output("desc_box", "children"),
-    Input("tickers", "value"),
+    Input("acciones_sel", "value"),
     Input("view", "value"),
     Input("dates", "start_date"),
     Input("dates", "end_date"),
 )
-def update_view_acciones(tickers_sel, view, start_date, end_date):
+def actualizar_inciso1(tickers_sel, vista, start_date, end_date):
+    # Si no hay acciones seleccionadas
     if not tickers_sel:
-        fig = px.line(title="Select")
-        return fig, "—"
+        fig = go.Figure()
+        fig.update_layout(
+            title="Selecciona al menos una acción",
+            plot_bgcolor="white"
+        )
+        return fig, ""
 
-    px_df = PRICES.loc[start_date:end_date, tickers_sel]
-    rt_df = RETURNS.loc[start_date:end_date, tickers_sel]
+    # Elegir precios o retornos
+    base = RETURNS if vista == "return" else PRICES
 
-    if view == "price":
-        fig = px.line(px_df, title="Precios de cierre de acciones")
+    # Filtrar solo columnas seleccionadas
+    tickers_sel = [t for t in tickers_sel if t in base.columns]
+    if not tickers_sel:
+        fig = go.Figure()
+        fig.update_layout(
+            title="Ninguna de las acciones seleccionadas tiene datos.",
+            plot_bgcolor="white"
+        )
+        return fig, ""
+
+    df = base[tickers_sel].copy()
+
+    # Filtro de fechas
+    if start_date is not None:
+        start = pd.to_datetime(start_date)
+        df = df[df.index >= start]
+    if end_date is not None:
+        end = pd.to_datetime(end_date)
+        df = df[df.index <= end]
+
+    if df.empty:
+        fig = go.Figure()
+        fig.update_layout(
+            title="No hay datos para ese rango de fechas.",
+            plot_bgcolor="white"
+        )
+        return fig, "No hay datos para ese rango de fechas."
+
+    # Título y etiqueta del eje Y según la vista
+    if vista == "price":
+        title = "Precios de cierre de acciones"
+        y_label = "Precio de cierre (USD)"
     else:
-        fig = px.line(rt_df, title="Retornos diarios de acciones")
+        title = "Retornos diarios de acciones"
+        y_label = "Retorno diario"
 
-    fig.update_layout(
-        hovermode="x unified",
-        plot_bgcolor="white",
-        legend_title_text="Ticker"
+    fig = px.line(
+        df,
+        x=df.index,
+        y=tickers_sel,
+        labels={
+            "value": y_label,
+            "variable": "Ticker",
+            "index": "Fecha"
+        },
+        title=title
     )
 
-    desc_text = "\n".join([f"{t}: {DESC.get(t, '—')}" for t in tickers_sel])
+    fig.update_layout(
+        plot_bgcolor="white",
+        hovermode="x unified",
+        legend_title="Ticker",
+        xaxis=dict(showgrid=True, gridcolor="rgba(0,0,0,0.05)"),
+        yaxis=dict(showgrid=True, gridcolor="rgba(0,0,0,0.05)")
+    )
+
+    # Descripción de empresas
+    desc_lines = []
+    for t in tickers_sel:
+        if t in DESC:
+            desc_lines.append(f"{t}: {DESC[t]}")
+        else:
+            desc_lines.append(f"{t}: (sin descripción registrada)")
+
+    desc_text = "\n".join(desc_lines)
+
     return fig, desc_text
 
 
