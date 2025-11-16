@@ -30,7 +30,9 @@ DESC = {
 HOY_ACC = date.today()
 INICIO_ACC = HOY_ACC - timedelta(days=365 * 15)  # ~15 años
 
+
 def get_prices_actions(tickers=TICKERS, start=INICIO_ACC, end=HOY_ACC):
+    # Descarga conjunta
     df = yf.download(
         tickers,
         start=start,
@@ -38,20 +40,56 @@ def get_prices_actions(tickers=TICKERS, start=INICIO_ACC, end=HOY_ACC):
         auto_adjust=True,
         progress=False
     )
-    # Si yfinance devuelve MultiIndex (Close, Volume, etc.), nos quedamos con Close
+
+    # Si viene MultiIndex (Adj Close, Close, etc.), nos quedamos con Close o Adj Close
     if isinstance(df.columns, pd.MultiIndex):
-        df = df["Close"].copy()
+        # usa "Adj Close" si existe, si no "Close"
+        if "Adj Close" in df.columns.levels[0]:
+            df = df["Adj Close"].copy()
+        else:
+            df = df["Close"].copy()
+
+    df.index = pd.to_datetime(df.index, errors="coerce")
     df = df.dropna(how="all")
-    df.index = pd.to_datetime(df.index)
+
+    # Ver qué tickers faltan en las columnas
+    presentes = [c for c in df.columns if c in tickers]
+    faltantes = [t for t in tickers if t not in presentes]
+
+    # Reintentar cada faltante por separado
+    for t in faltantes:
+        try:
+            s = yf.download(
+                t,
+                start=start,
+                end=end + timedelta(days=1),
+                auto_adjust=True,
+                progress=False
+            )["Close"]
+            s = s.dropna()
+            s.name = t
+            df = pd.concat([df, s], axis=1)
+        except Exception as e:
+            print(f"No se pudo descargar {t}: {e}")
+
+    # Nos quedamos solo con las columnas de los tickers originales que sí existen
+    cols_finales = [t for t in tickers if t in df.columns]
+    df = df[cols_finales]
+
     return df
 
+
+# === Construcción de PRICES y RETURNS ===
 PRICES = get_prices_actions()
 
-# 🔹 Convertir todo a valores numéricos para evitar strings o None
+# Convertir a numérico por seguridad
 PRICES = PRICES.apply(pd.to_numeric, errors="coerce")
 
-# 🔹 Calcular retornos de forma segura y sin warnings
+# Retornos diarios
 RETURNS = PRICES.pct_change(fill_method=None).dropna(how="all")
+
+# Lista real de acciones (para dropdowns)
+ACCIONES_LIST = list(PRICES.columns)
 
 # ============================================================
 # 2. DATOS DE CRIPTOS (Data1 + Data2)
@@ -159,8 +197,8 @@ layout_inciso1 = html.Div([
         html.Div([
             html.Label("Acciones"),
             dcc.Dropdown(
-                id="tickers",
-                options=[{"label": t, "value": t} for t in PRICES.columns],
+                id="acciones_sel",
+                options=[{"label": t, "value": t} for t in ACCIONES_LIST],
                 value=["PG", "KO", "PEP"],
                 multi=True
             )
