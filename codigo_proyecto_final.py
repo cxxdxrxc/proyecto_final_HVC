@@ -315,7 +315,7 @@ layout_inciso2 = html.Div([
     dcc.Graph(id="graf_var_cvar"),
 
     html.H3("Max Drawdown por acción"),
-    dcc.Graph(id="graf_mdd"),
+    dcc.Graph(id="graf_mdd_acc"),
 ], style={"maxWidth": "1100px", "margin": "0 auto", "padding": "10px"})
 
 
@@ -414,18 +414,21 @@ layout_inciso3b = html.Div([
 ], style={"maxWidth": "1000px", "margin": "0 auto", "padding": "15px"})
 
 
+
 # INCISO 3c – Max Drawdown y CVaR 95% (criptos)
 layout_inciso3c = html.Div([
     html.H2("Criptomonedas: Max Drawdown y CVaR 95%",
             style={"textAlign": "center"}),
 
-    html.P("Indicadores de riesgo histórico (Max Drawdown y CVaR 95%) para cada criptomoneda.",
-           style={"textAlign": "center", "color": "#555"}),
+    html.P(
+        "Indicadores de riesgo histórico (Max Drawdown y CVaR 95%) para cada criptomoneda.",
+        style={"textAlign": "center", "color": "#555"}
+    ),
 
-    dcc.Graph(id="graf_mdd"),
-    dcc.Graph(id="graf_cvar")
+    # IDs específicos para criptos
+    dcc.Graph(id="graf_mdd_crypto"),
+    dcc.Graph(id="graf_cvar_crypto"),
 ], style={"maxWidth": "1000px", "margin": "0 auto", "padding": "15px"})
-
 
 # ------------------- Layout principal con Tabs -------------------
 
@@ -588,7 +591,7 @@ def actualizar_inciso1(tickers_sel, vista, start_date, end_date):
 @app.callback(
     Output("graf_vol_skw_kurt", "figure"),
     Output("graf_var_cvar", "figure"),
-    Output("graf_mdd", "figure"),
+    Output("graf_mdd_acc", "figure"),
     Input("acciones_risk_sel", "value"),
     Input("alpha_risk", "value"),
     Input("dates_risk", "start_date"),
@@ -1024,8 +1027,8 @@ def actualizar_grafico_anim(cryptos_sel):
 # ---------- Inciso 3c – Max Drawdown y CVaR 95% (criptos) ----------
 
 @app.callback(
-    Output("graf_mdd", "figure"),
-    Output("graf_cvar", "figure"),
+    Output("graf_mdd_crypto", "figure"),
+    Output("graf_cvar_crypto", "figure"),
     Input("tabs-proyecto", "value")  # se recalcula al entrar a la tab
 )
 def actualizar_riesgo_cripto(tab):
@@ -1033,25 +1036,32 @@ def actualizar_riesgo_cripto(tab):
         raise exceptions.PreventUpdate
 
     mdd = {t: max_drawdown(CRYPTO_WIDE[t].dropna()) for t in CRYPTO_WIDE.columns}
-    cvar95 = {t: cvar_historico(CRYPTO_RET[t].dropna().values, alpha=0.95)
-              for t in CRYPTO_RET.columns}
+    cvar95 = {
+        t: cvar_historico(CRYPTO_RET[t].dropna().values, alpha=0.95)
+        for t in CRYPTO_RET.columns
+    }
 
     df_risk = pd.DataFrame({"MaxDrawdown": mdd, "CVaR95": cvar95})
-    df_risk_sorted = df_risk.sort_values(["MaxDrawdown", "CVaR95"],
-                                         ascending=[True, False])
+    df_risk_sorted = df_risk.sort_values(
+        ["MaxDrawdown", "CVaR95"],
+        ascending=[True, False]
+    )
 
     df_plot = df_risk_sorted.reset_index().rename(columns={"index": "Crypto"})
 
-    fig_mdd = px.bar(df_plot, x="Crypto", y="MaxDrawdown",
-                     title="Max Drawdown — por criptomoneda")
+    fig_mdd = px.bar(
+        df_plot, x="Crypto", y="MaxDrawdown",
+        title="Max Drawdown — por criptomoneda"
+    )
     fig_mdd.update_layout(plot_bgcolor="white")
 
-    fig_cvar = px.bar(df_plot, x="Crypto", y="CVaR95",
-                      title="CVaR 95% (histórico) — por criptomoneda")
+    fig_cvar = px.bar(
+        df_plot, x="Crypto", y="CVaR95",
+        title="CVaR 95% (histórico) — por criptomoneda"
+    )
     fig_cvar.update_layout(plot_bgcolor="white")
 
     return fig_mdd, fig_cvar
-
 
 # ============================================================
 # 7. MAIN
