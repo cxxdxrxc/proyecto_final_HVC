@@ -174,8 +174,10 @@ layout_inciso1 = html.Div([
 
     dcc.DatePickerRange(
         id="dates",
-        start_date=INICIO_ACC,
-        end_date=HOY_ACC,
+        min_date_allowed=min_date_acc.date(),
+        max_date_allowed=max_date_acc.date(),
+        start_date=default_start_acc.date(),
+        end_date=max_date_acc.date(),
         display_format="YYYY-MM-DD"
     ),
 
