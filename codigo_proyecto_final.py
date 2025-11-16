@@ -27,16 +27,20 @@ DESC = {
     "GE":  "General Electric — Industrial (energía, salud, aeroespacial).",
 }
 
-# ==== ACCIONES DESDE CSV (sin yfinance en producción) ====
+ACCIONES_FILE = "Acciones.csv"   # este archivo tiene que estar en el repo (misma carpeta que el .py)
 
-ACCIONES_FILE = "Acciones.csv"   # asegúrate de que este archivo esté en el repo
-
-# Leemos precios de cierre (ya guardados desde tu notebook)
+# Leer precios de cierre desde el CSV
 PRICES = pd.read_csv(ACCIONES_FILE, index_col=0)
+
+# Índice como fecha
 PRICES.index = pd.to_datetime(PRICES.index, errors="coerce")
 PRICES = PRICES.dropna(how="all")
 
-# Convertir a numérico por seguridad
+# Nos quedamos solo con las columnas que estén en TICKERS y sí existan en el CSV
+cols_finales = [t for t in TICKERS if t in PRICES.columns]
+PRICES = PRICES[cols_finales]
+
+# Asegurar que todo sea numérico
 PRICES = PRICES.apply(pd.to_numeric, errors="coerce")
 
 # Retornos diarios
@@ -44,6 +48,15 @@ RETURNS = PRICES.pct_change(fill_method=None).dropna(how="all")
 
 # Lista real de acciones (para dropdowns)
 ACCIONES_LIST = list(PRICES.columns)
+
+# Fechas para el DatePicker de acciones
+min_date_acc = PRICES.index.min()
+max_date_acc = PRICES.index.max()
+
+# 15 años hacia atrás desde la última fecha disponible (o hasta el mínimo)
+default_start_acc = max_date_acc - pd.Timedelta(days=365 * 15)
+if default_start_acc < min_date_acc:
+    default_start_acc = min_date_acc
 
 # ============================================================
 # 2. DATOS DE CRIPTOS (Data1 + Data2)
