@@ -29,43 +29,38 @@ DESC = {
 # =========================
 # 1. Cargar Acciones.csv
 # =========================
-# Se asume que Acciones.csv tiene columnas: Date, ticker, Open, High, Low, Close, Volume
-df_acc = pd.read_csv("Acciones.csv")
+# =========================
+# 1. Cargar Acciones.csv (formato ancho)
+# =========================
+# Se asume que Acciones.csv tiene fechas como índice o como primera columna
+# y una columna por ticker: PG, KO, PEP, CAT, HON, GE, etc.
 
-# Aseguramos tipo fecha y orden
-df_acc["Date"] = pd.to_datetime(df_acc["Date"], errors="coerce")
-df_acc = df_acc.dropna(subset=["Date"])
-df_acc = df_acc.sort_values(["Date", "ticker"])
+df_acc = pd.read_csv("Acciones.csv", index_col=0)  # primera columna = fecha
 
-# Eliminamos duplicados (Date, ticker) si existieran
-df_acc = df_acc.drop_duplicates(subset=["Date", "ticker"], keep="last")
+# Asegurar que el índice son fechas y está ordenado
+df_acc.index = pd.to_datetime(df_acc.index, errors="coerce")
+df_acc = df_acc.dropna(subset=[df_acc.index.name])
+df_acc = df_acc.sort_index()
 
 # =========================
-# 2. Pivot a formato ancho: precios de cierre
+# 2. PRICES y RETURNS
 # =========================
-PRICES = df_acc.pivot_table(
-    index="Date",
-    columns="ticker",
-    values="Close",
-    aggfunc="last"
-)
+PRICES = df_acc.copy()
 
-# Ordenar índice y convertir a numérico
-PRICES = PRICES.sort_index()
+# Convertir todo a numérico por seguridad (cualquier texto raro → NaN)
 PRICES = PRICES.apply(pd.to_numeric, errors="coerce")
 
-# =========================
-# 3. Retornos diarios
-# =========================
+# Retornos diarios (sin fill_method implícito)
 RETURNS = PRICES.pct_change(fill_method=None).dropna(how="all")
 
-# Lista de acciones disponibles (columnas del pivot)
+# Lista de acciones disponibles (columnas del CSV)
 ACCIONES_LIST = list(PRICES.columns)
 
 # Fechas mín/máx para los controles
 min_date_acc = PRICES.index.min()
 max_date_acc = PRICES.index.max()
-# Por defecto mostramos últimos 5 años
+
+# Por defecto, últimos 5 años
 default_start_acc = max_date_acc - pd.Timedelta(days=365 * 5)
 if default_start_acc < min_date_acc:
     default_start_acc = min_date_acc
