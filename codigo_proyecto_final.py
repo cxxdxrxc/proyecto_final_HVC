@@ -207,7 +207,7 @@ server = app.server
 # =========================
 
 layout_inciso1 = html.Div([
-    html.H2("Exploración de acciones: precios y retornos",
+    html.H2("Exploración de Acciones: Precios y Retornos",
             style={"textAlign": "center"}),
 
     html.P("Selecciona acciones, elige si ver precios o retornos y filtra el rango de fechas.",
@@ -261,7 +261,7 @@ layout_inciso1 = html.Div([
 # ============================================================
 
 layout_inciso2 = html.Div([
-    html.H2("Inciso 2 – Indicadores de riesgo de acciones",
+    html.H2("Inciso 2 – Indicadores de Riesgo de Acciones",
             style={"textAlign": "center"}),
 
     html.P("Volatilidad, sesgo, curtosis, VaR, CVaR y Max Drawdown para las acciones seleccionadas.",
@@ -404,7 +404,7 @@ layout_inciso3a = html.Div([
 
 # INCISO 3b – Gráfico animado de precios cripto
 layout_inciso3b = html.Div([
-    html.H2("Criptomonedas: gráfico animado de precios",
+    html.H2("Criptomonedas: Gráfico Animado de Precios Históricos",
             style={"textAlign": "center"}),
 
     html.P("Animación mensual de la evolución de los precios de las criptomonedas seleccionadas.",
@@ -444,13 +444,13 @@ layout_inciso3c = html.Div([
     ),
 
     html.Div([
-        html.Label("Criptomonedas (opcional)"),
+        html.Label("Criptomonedas"),
         dcc.Dropdown(
             id="crypto_risk_sel",
             options=[{"label": c, "value": c} for c in CRYPTO_WIDE.columns],
             value=[],              # vacío = usar todas
             multi=True,
-            placeholder="Si lo dejas vacío se muestran todas las criptos"
+            placeholder="Seleccionar una Criptomoneda (Vacío Se Muestran Todas)"
         )
     ], style={"maxWidth": "700px", "margin": "0 auto 20px"}),
 
@@ -922,7 +922,7 @@ def actualizar_bollinger(crypto, window, sigma, start_date, end_date):
         ))
 
     fig.update_layout(
-        title=(f"Bandas de Bollinger de retornos — {crypto} "
+        title=(f"Bandas de Bollinger de Retornos — {crypto} "
                f"(ventana {window} días, ±{sigma}σ)"),
         xaxis_title="Fecha",
         yaxis_title="Retorno diario",
