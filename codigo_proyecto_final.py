@@ -179,7 +179,7 @@ layout_inciso1 = html.Div([
                 options=[{"label": t, "value": t} for t in ACCIONES_LIST],
                 value=ACCIONES_LIST[:3],       # si quieres que empiece vacío: value=[]
                 multi=True,
-                placeholder="Selecciona una o varias acciones..."
+                placeholder="Select"
             )
         ], style={"flex": "3"}),
 
@@ -231,7 +231,7 @@ layout_inciso3a = html.Div([
                 options=[{"label": c, "value": c} for c in crypto_list],
                 value=None,
                 multi=False,
-                placeholder="Selecciona una cripto..."
+                placeholder="Select"
             ),
         ], style={"marginBottom": "20px"}),
 
