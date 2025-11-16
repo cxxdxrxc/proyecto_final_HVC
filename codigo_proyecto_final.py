@@ -65,6 +65,48 @@ default_start_acc = max_date_acc - pd.Timedelta(days=365 * 5)
 if default_start_acc < min_date_acc:
     default_start_acc = min_date_acc
 
+
+
+# ============================================================
+# Funciones auxiliares de riesgo (INCISO 2)
+# ============================================================
+
+def var_historico(x, alpha=0.95):
+    """
+    VaR histórico (alpha). x debe ser un array/serie de retornos.
+    Devuelve el percentil 1-alpha (por ejemplo, alpha=0.95 → percentil 5%).
+    """
+    arr = np.asarray(pd.Series(x).dropna())
+    if arr.size == 0:
+        return np.nan
+    # pérdidas grandes → parte izquierda de la distribución
+    return float(np.quantile(arr, 1 - alpha))
+
+def cvar_historico(x, alpha=0.95):
+    """
+    CVaR histórico (Expected Shortfall):
+    promedio de las pérdidas peores que el VaR.
+    """
+    arr = np.asarray(pd.Series(x).dropna())
+    if arr.size == 0:
+        return np.nan
+    v = np.quantile(arr, 1 - alpha)
+    cola = arr[arr <= v]
+    if cola.size == 0:
+        return np.nan
+    return float(cola.mean())
+
+def max_drawdown(series_prices: pd.Series) -> float:
+    """
+    Máximo drawdown a partir de una serie de precios.
+    """
+    s = pd.Series(series_prices).dropna()
+    if s.empty:
+        return np.nan
+    roll_max = s.cummax()
+    drawdown = s / roll_max - 1.0
+    return float(drawdown.min())
+
 # ============================================================
 # 2. DATOS DE CRIPTOS (Data1 + Data2)
 # ============================================================
@@ -214,6 +256,68 @@ layout_inciso1 = html.Div([
     html.Div(id="desc_box", style={"whiteSpace": "pre-line", "lineHeight": "1.5"}),
 ], style={"maxWidth": "1000px", "margin": "0 auto", "padding": "10px"})
 
+# ============================================================
+#  INCISO 2 – Indicadores de riesgo (acciones)
+# ============================================================
+
+layout_inciso2 = html.Div([
+    html.H2("Inciso 2 – Indicadores de riesgo de acciones",
+            style={"textAlign": "center"}),
+
+    html.P("Volatilidad, sesgo, curtosis, VaR, CVaR y Max Drawdown para las acciones seleccionadas.",
+           style={"textAlign": "center"}),
+
+    # Controles
+    html.Div([
+        html.Div([
+            html.Label("Acciones"),
+            dcc.Dropdown(
+                id="acciones_risk_sel",
+                options=[{"label": t, "value": t} for t in ACCIONES_LIST],
+                value=ACCIONES_LIST,      # por defecto, todas
+                multi=True,
+                placeholder="Selecciona una o varias acciones..."
+            )
+        ], style={"flex": "2"}),
+
+        html.Div([
+            html.Label("Nivel de confianza para VaR / CVaR"),
+            dcc.RadioItems(
+                id="alpha_risk",
+                options=[
+                    {"label": "90%", "value": 0.90},
+                    {"label": "95%", "value": 0.95},
+                ],
+                value=0.95,
+                labelStyle={"display": "block"}
+            )
+        ], style={"flex": "1", "marginLeft": "12px"}),
+    ], style={"display": "flex", "gap": "12px", "marginBottom": "10px"}),
+
+    html.Div([
+        html.Label("Rango de fechas"),
+        dcc.DatePickerRange(
+            id="dates_risk",
+            min_date_allowed=min_date_acc.date(),
+            max_date_allowed=max_date_acc.date(),
+            start_date=default_start_acc.date(),
+            end_date=max_date_acc.date(),
+            display_format="YYYY-MM-DD"
+        )
+    ], style={"marginBottom": "15px"}),
+
+    html.Hr(),
+
+    html.H3("Volatilidad, sesgo y curtosis (por acción)"),
+    dcc.Graph(id="graf_vol_skw_kurt"),
+
+    html.H3("VaR y CVaR histórico por acción"),
+    dcc.Graph(id="graf_var_cvar"),
+
+    html.H3("Max Drawdown por acción"),
+    dcc.Graph(id="graf_mdd"),
+], style={"maxWidth": "1100px", "margin": "0 auto", "padding": "10px"})
+
 
 # INCISO 3a – Bandas de Bollinger para retornos de criptos
 layout_inciso3a = html.Div([
@@ -337,6 +441,7 @@ app.layout = html.Div([
         value="inciso1",
         children=[
             dcc.Tab(label="Acciones: precios y retornos", value="inciso1"),
+            dcc.Tab(label="Acciones: análisis de riesgo", value="inciso2"),
             dcc.Tab(label="Cripto: Bollinger retornos", value="inciso3a"),
             dcc.Tab(label="Cripto: gráfico animado", value="inciso3b"),
             dcc.Tab(label="Cripto: MDD y CVaR 95%", value="inciso3c"),
@@ -358,6 +463,8 @@ app.layout = html.Div([
 def render_tab_content(tab):
     if tab == "inciso1":
         return layout_inciso1
+    elif tab == "inciso2":
+        return layout_inciso2
     elif tab == "inciso3a":
         return layout_inciso3a
     elif tab == "inciso3b":
@@ -462,6 +569,163 @@ def actualizar_inciso1(tickers_sel, vista, start_date, end_date):
     desc_text = "\n".join(desc_lines)
 
     return fig, desc_text
+
+
+# ============================================================
+#  CALLBACK – INCISO 2
+# ============================================================
+
+@app.callback(
+    Output("graf_vol_skw_kurt", "figure"),
+    Output("graf_var_cvar", "figure"),
+    Output("graf_mdd", "figure"),
+    Input("acciones_risk_sel", "value"),
+    Input("alpha_risk", "value"),
+    Input("dates_risk", "start_date"),
+    Input("dates_risk", "end_date"),
+)
+def actualizar_inciso2(tickers_sel, alpha, start_date, end_date):
+    # Validación básica
+    if not tickers_sel:
+        fig_empty = go.Figure()
+        fig_empty.update_layout(
+            title="Selecciona al menos una acción",
+            plot_bgcolor="white"
+        )
+        return fig_empty, fig_empty, fig_empty
+
+    # Tomar precios y retornos base
+    prices = PRICES.copy()
+    rets = RETURNS.copy()
+
+    # Filtrar tickers
+    tickers_sel = [t for t in tickers_sel if t in prices.columns]
+    if not tickers_sel:
+        fig_empty = go.Figure()
+        fig_empty.update_layout(
+            title="Las acciones seleccionadas no tienen datos en el dataset.",
+            plot_bgcolor="white"
+        )
+        return fig_empty, fig_empty, fig_empty
+
+    prices = prices[tickers_sel]
+    rets = rets[tickers_sel]
+
+    # Filtrar por fechas
+    if start_date is not None:
+        start = pd.to_datetime(start_date)
+        prices = prices[prices.index >= start]
+        rets = rets[rets.index >= start]
+    if end_date is not None:
+        end = pd.to_datetime(end_date)
+        prices = prices[prices.index <= end]
+        rets = rets[rets.index <= end]
+
+    # Si después del filtro no queda nada
+    if rets.dropna(how="all").empty:
+        fig_empty = go.Figure()
+        fig_empty.update_layout(
+            title="No hay datos para ese rango de fechas.",
+            plot_bgcolor="white"
+        )
+        return fig_empty, fig_empty, fig_empty
+
+    # =============================
+    # 1) Volatilidad, skew, kurtosis
+    # =============================
+    vols = {}
+    skws = {}
+    kurts = {}
+
+    for t in tickers_sel:
+        s = rets[t].dropna()
+        if s.empty:
+            vols[t] = np.nan
+            skws[t] = np.nan
+            kurts[t] = np.nan
+        else:
+            vols[t] = float(s.std())              # volatilidad diaria
+            skws[t] = float(skew(s, bias=False))  # asimetría
+            kurts[t] = float(kurtosis(s, fisher=True, bias=False))  # curtosis (exceso)
+
+    df_mom = pd.DataFrame({
+        "Ticker": tickers_sel,
+        "Vol": [vols[t] for t in tickers_sel],
+        "Skew": [skws[t] for t in tickers_sel],
+        "Kurtosis": [kurts[t] for t in tickers_sel],
+    })
+
+    # Gráfico: barras agrupadas Vol / Skew / Kurtosis
+    fig_mom = go.Figure()
+    fig_mom.add_bar(x=df_mom["Ticker"], y=df_mom["Vol"], name="Volatilidad (σ)")
+    fig_mom.add_bar(x=df_mom["Ticker"], y=df_mom["Skew"], name="Skewness")
+    fig_mom.add_bar(x=df_mom["Ticker"], y=df_mom["Kurtosis"], name="Kurtosis (exceso)")
+
+    fig_mom.update_layout(
+        barmode="group",
+        title="Volatilidad, skewness y curtosis por acción",
+        xaxis_title="Ticker",
+        yaxis_title="Valor",
+        plot_bgcolor="white",
+        legend_title="Indicador"
+    )
+
+    # =============================
+    # 2) VaR y CVaR histórico
+    # =============================
+    var_dict = {}
+    cvar_dict = {}
+
+    for t in tickers_sel:
+        s = rets[t].dropna()
+        if s.empty:
+            var_dict[t] = np.nan
+            cvar_dict[t] = np.nan
+        else:
+            var_dict[t] = var_historico(s, alpha=alpha)
+            cvar_dict[t] = cvar_historico(s, alpha=alpha)
+
+    df_var = pd.DataFrame({
+        "Ticker": tickers_sel,
+        "VaR": [var_dict[t] for t in tickers_sel],
+        "CVaR": [cvar_dict[t] for t in tickers_sel],
+    })
+
+    fig_var = go.Figure()
+    fig_var.add_bar(x=df_var["Ticker"], y=df_var["VaR"], name=f"VaR {int(alpha*100)}%")
+    fig_var.add_bar(x=df_var["Ticker"], y=df_var["CVaR"], name=f"CVaR {int(alpha*100)}%")
+
+    fig_var.update_layout(
+        barmode="group",
+        title=f"VaR y CVaR histórico (nivel {int(alpha*100)}%)",
+        xaxis_title="Ticker",
+        yaxis_title="Retorno (pérdida esperada)",
+        plot_bgcolor="white",
+        legend_title="Indicador"
+    )
+
+    # =============================
+    # 3) Max Drawdown
+    # =============================
+    mdd_dict = {}
+    for t in tickers_sel:
+        mdd_dict[t] = max_drawdown(prices[t])
+
+    df_mdd = pd.DataFrame({
+        "Ticker": tickers_sel,
+        "MaxDrawdown": [mdd_dict[t] for t in tickers_sel],
+    })
+
+    fig_mdd = px.bar(
+        df_mdd,
+        x="Ticker",
+        y="MaxDrawdown",
+        title="Max Drawdown por acción",
+        labels={"MaxDrawdown": "Máximo drawdown", "Ticker": "Ticker"}
+    )
+    fig_mdd.update_layout(plot_bgcolor="white")
+
+    return fig_mom, fig_var, fig_mdd
 
 
 # ---------- Inciso 3a – Bollinger cripto ----------
