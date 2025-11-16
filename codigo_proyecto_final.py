@@ -433,6 +433,7 @@ layout_inciso3b = html.Div([
 
 
 # INCISO 3c – Max Drawdown y CVaR 95% (criptos)
+# INCISO 3c – Max Drawdown y CVaR 95% (criptos)
 layout_inciso3c = html.Div([
     html.H2("Criptomonedas: Max Drawdown y CVaR 95%",
             style={"textAlign": "center"}),
@@ -442,10 +443,32 @@ layout_inciso3c = html.Div([
         style={"textAlign": "center", "color": "#555"}
     ),
 
-    # IDs específicos para criptos
-    dcc.Graph(id="graf_mdd_crypto"),
-    dcc.Graph(id="graf_cvar_crypto"),
-], style={"maxWidth": "1000px", "margin": "0 auto", "padding": "15px"})
+    html.Div([
+        html.Label("Criptomonedas (opcional)"),
+        dcc.Dropdown(
+            id="crypto_risk_sel",
+            options=[{"label": c, "value": c} for c in CRYPTO_WIDE.columns],
+            value=[],              # vacío = usar todas
+            multi=True,
+            placeholder="Si lo dejas vacío se muestran todas las criptos"
+        )
+    ], style={"maxWidth": "700px", "margin": "0 auto 20px"}),
+
+    html.Hr(),
+
+    dcc.Graph(id="graf_mdd"),
+    dcc.Graph(id="graf_cvar"),
+
+    html.Div(
+        id="texto_riesgo_crypto",
+        style={
+            "maxWidth": "900px",
+            "margin": "15px auto 0",
+            "textAlign": "center",
+            "whiteSpace": "pre-line"
+        }
+    )
+], style={"maxWidth": "1100px", "margin": "0 auto", "padding": "15px"})
 
 # ------------------- Layout principal con Tabs -------------------
 
@@ -1092,14 +1115,18 @@ def actualizar_grafico_anim(cryptos_sel):
 # ---------- Inciso 3c – Max Drawdown y CVaR 95% (criptos) ----------
 
 @app.callback(
-    Output("graf_mdd_crypto", "figure"),
-    Output("graf_cvar_crypto", "figure"),
-    Input("tabs-proyecto", "value")  # se recalcula al entrar a la tab
+    Output("graf_mdd", "figure"),
+    Output("graf_cvar", "figure"),
+    Output("texto_riesgo_crypto", "children"),
+    Input("tabs-proyecto", "value"),
+    Input("crypto_risk_sel", "value")
 )
-def actualizar_riesgo_cripto(tab):
+def actualizar_riesgo_cripto(tab, cryptos_sel):
+    # Solo actualizamos si estamos en la tab de cripto-riesgo
     if tab != "inciso3c":
         raise exceptions.PreventUpdate
 
+    # --- Riesgo para TODAS las criptos ---
     mdd = {t: max_drawdown(CRYPTO_WIDE[t].dropna()) for t in CRYPTO_WIDE.columns}
     cvar95 = {
         t: cvar_historico(CRYPTO_RET[t].dropna().values, alpha=0.95)
@@ -1107,26 +1134,60 @@ def actualizar_riesgo_cripto(tab):
     }
 
     df_risk = pd.DataFrame({"MaxDrawdown": mdd, "CVaR95": cvar95})
-    df_risk_sorted = df_risk.sort_values(
-        ["MaxDrawdown", "CVaR95"],
-        ascending=[True, False]
-    )
 
+    # --- Filtrar por selección del usuario (si eligió algo) ---
+    if cryptos_sel:
+        cryptos_sel = [c for c in cryptos_sel if c in df_risk.index]
+        if not cryptos_sel:
+            fig_empty = go.Figure()
+            fig_empty.update_layout(
+                title="Ninguna de las criptomonedas seleccionadas tiene datos.",
+                plot_bgcolor="white"
+            )
+            return fig_empty, fig_empty, "Ninguna de las criptomonedas seleccionadas tiene datos."
+        df_risk = df_risk.loc[cryptos_sel]
+
+    # Ordenamos por MaxDrawdown (más negativo primero)
+    df_risk_sorted = df_risk.sort_values("MaxDrawdown", ascending=True)
     df_plot = df_risk_sorted.reset_index().rename(columns={"index": "Crypto"})
 
+    # --- Gráfico de Max Drawdown ---
     fig_mdd = px.bar(
-        df_plot, x="Crypto", y="MaxDrawdown",
-        title="Max Drawdown — por criptomoneda"
+        df_plot,
+        x="Crypto",
+        y="MaxDrawdown",
+        title="Max Drawdown — por criptomoneda",
+        labels={"MaxDrawdown": "Max Drawdown", "Crypto": "Crypto"}
     )
     fig_mdd.update_layout(plot_bgcolor="white")
 
+    # --- Gráfico de CVaR 95% ---
     fig_cvar = px.bar(
-        df_plot, x="Crypto", y="CVaR95",
-        title="CVaR 95% (histórico) — por criptomoneda"
+        df_plot,
+        x="Crypto",
+        y="CVaR95",
+        title="CVaR 95% (histórico) — por criptomoneda",
+        labels={"CVaR95": "CVaR 95%", "Crypto": "Crypto"}
     )
     fig_cvar.update_layout(plot_bgcolor="white")
 
-    return fig_mdd, fig_cvar
+    # --- Resumen textual tipo dashboard ---
+    worst_mdd_row = df_risk_sorted.iloc[0]
+    worst_mdd_name = df_risk_sorted.index[0]
+
+    df_cvar_sorted = df_risk.sort_values("CVaR95", ascending=True)
+    worst_cvar_row = df_cvar_sorted.iloc[0]
+    worst_cvar_name = df_cvar_sorted.index[0]
+
+    texto = (
+        f"Peor Max Drawdown: {worst_mdd_name} con {worst_mdd_row['MaxDrawdown']:.2%}.\n"
+        f"Peor CVaR 95% (pérdidas promedio en el 5% de peores días): "
+        f"{worst_cvar_name} con {worst_cvar_row['CVaR95']:.2%}.\n\n"
+        f"Las barras muestran las criptomonedas ordenadas por Max Drawdown "
+        f"(de mayor pérdida a menor) para el conjunto seleccionado."
+    )
+
+    return fig_mdd, fig_cvar, texto
 
 # ============================================================
 # 7. MAIN
